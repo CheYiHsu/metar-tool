@@ -1,8 +1,8 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>RCTP METAR Visualizer</title>
   <style>
     body { font-family: sans-serif; text-align: center; padding: 20px; }
@@ -21,7 +21,15 @@
     .info { margin-top: 20px; font-size: 18px; }
     .red { color: red; }
     .icon { width: 50px; vertical-align: middle; }
-    #runway { position: absolute; width: 10px; height: 150px; background: black; top: 75px; left: 145px; transform-origin: center; }
+    #runway {
+      position: absolute;
+      width: 200px;
+      height: 10px;
+      background: black;
+      top: 145px;
+      left: 50px;
+      transform-origin: center center;
+    }
     .angle-label {
       position: absolute;
       font-size: 14px;
@@ -53,7 +61,6 @@
         label.className = "angle-label";
         const radius = 140;
         const rad = (i - 90) * Math.PI / 180;
-        label.style.position = 'absolute';
         label.style.left = 150 + radius * Math.cos(rad) + "px";
         label.style.top = 150 + radius * Math.sin(rad) + "px";
         label.innerText = i;
@@ -127,11 +134,9 @@
       let rwy = runwayMap[icao] || [50, 230];
       const rwy1 = rwy[0];
       const rwy2 = rwy[1];
-      const runwayHeading = rwy1;
-
-      document.getElementById("runway").style.transform = `rotate(${runwayHeading}deg)`;
-
-      let icon = clear ? "☀️" : rain ? "🌧️" : mist ? "🌫️" : "❓";
+      const runwayHeading = ((rwy1 + rwy2) / 2) % 360;
+      const canvasAngle = (runwayHeading - 90 + 360) % 360;
+      document.getElementById("runway").style.transform = `rotate(${canvasAngle}deg)`;
 
       function angleDiff(a, b) {
         let diff = Math.abs(a - b) % 360;
@@ -145,7 +150,7 @@
 
       document.getElementById("weatherInfo").innerHTML = `
         <div><strong>Airport:</strong> ${icao}</div>
-        <div><strong>Weather:</strong> ${icon}</div>
+        <div><strong>Weather:</strong> ${clear ? "☀️" : rain ? "🌧️" : mist ? "🌫️" : "❓"}</div>
         <div><strong>Flight Category:</strong> <span class="${category === 'IFR' ? 'red' : 'gray'}">${category}</span></div>
         ${(category === 'LIFR') ? `<div><em>Reason: Ceiling < 500 ft and Visibility < 1.6 km</em></div>` :
         (category === 'IFR') ? `<div><em>Reason: Ceiling < 1000 ft or Visibility < 5 km</em></div>` :
