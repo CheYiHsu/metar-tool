@@ -1,10 +1,11 @@
 <!DOCTYPE html>
+
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>METAR Visualizer</title>
-  <style>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>METAR Visualizer</title>
+<style>
     body { font-family: sans-serif; text-align: center; padding: 20px; }
     #canvas { width: 300px; height: 300px; margin: 0 auto; border: 1px solid #ccc; border-radius: 50%; position: relative; }
     #windArrow {
@@ -38,15 +39,14 @@
   </style>
 </head>
 <body>
-  <h2>METAR Visualizer</h2>
-  <textarea id="metarInput" rows="5" cols="60" placeholder="輸入 RCSS 的 METAR 資料..."></textarea><br><br>
-  <button onclick="parseMETAR()">Visualize</button>
-
-  <div class="info" id="weatherInfo"></div>
-  <div id="canvas">
-    <div id="runway"></div>
-    <div id="windArrow"></div>
-    <script>
+<h2>METAR Visualizer</h2>
+<textarea cols="60" id="metarInput" placeholder="輸入 RCSS 的 METAR 資料..." rows="5"></textarea><br/><br/>
+<button onclick="parseMETAR()">Visualize</button>
+<div class="info" id="weatherInfo"></div>
+<div id="canvas">
+<div id="runway"></div>
+<div id="windArrow"></div>
+<script>
       const canvas = document.getElementById("canvas");
       for (let i = 0; i < 360; i += 30) {
         const label = document.createElement("div");
@@ -76,9 +76,8 @@
         canvas.appendChild(dirLabel);
       });
     </script>
-  </div>
-
-  <script>
+</div>
+<script>
     function parseMETAR() {
       const input = document.getElementById("metarInput").value;
       const icaoMatch = input.match(/^METAR\s+(\w{4})/);
@@ -129,7 +128,7 @@
       const rwy2 = rwy[1];
       const runwayHeading = rwy1;
 
-      const canvasAngle = (runwayHeading + 270) % 360;
+      const canvasAngle = (runwayHeading - 90 + 360) % 360;
       document.getElementById("runway").style.transform = `rotate(${canvasAngle}deg)`;
 
       let icon = clear ? "☀️" : rain ? "🌧️" : mist ? "🌫️" : "❓";
