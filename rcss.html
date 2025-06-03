@@ -124,12 +124,13 @@
         RCSS: [100, 280]
       };
 
-      let rwy = runwayMap[icao] || [100, 280];
+      let rwy = runwayMap[icao] || [50, 230];
       const rwy1 = rwy[0];
       const rwy2 = rwy[1];
       const runwayHeading = rwy1;
 
-      document.getElementById("runway").style.transform = `rotate(${runwayHeading}deg)`;
+      const canvasAngle = (runwayHeading + 270) % 360;
+      document.getElementById("runway").style.transform = `rotate(${canvasAngle}deg)`;
 
       let icon = clear ? "☀️" : rain ? "🌧️" : mist ? "🌫️" : "❓";
 
