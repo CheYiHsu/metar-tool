@@ -12,10 +12,11 @@
       top: 50%;
       left: 50%;
       transform: translate(-50%, -50%);
-      font-size: 60px;
-      color: #0066cc;
+      font-size: 80px;
+      color: #dc3545;
       filter: drop-shadow(2px 2px 4px rgba(0,0,0,0.3));
       transition: transform 0.5s ease;
+      line-height: 1;
     }
     #windSpeed {
       position: absolute;
@@ -178,19 +179,20 @@
   </div>
 
   <script>
-    // 初始化羅盤標籤 - 只顯示 90 度間隔的數字
+    // 初始化羅盤標籤 - 使用跑道方向數字（3, 6, 9, 12 等）
     const canvas = document.getElementById("canvas");
-    const angleLabels = [90, 180, 270]; // 0度位置用 N 代替
-    angleLabels.forEach(angle => {
+    for (let i = 30; i <= 360; i += 30) {
       const label = document.createElement("div");
       label.className = "angle-label";
       const radius = 140;
-      const rad = (angle - 90) * Math.PI / 180;
+      const rad = (i - 90) * Math.PI / 180;
       label.style.left = 150 + radius * Math.cos(rad) + "px";
       label.style.top = 150 + radius * Math.sin(rad) + "px";
-      label.innerText = angle;
+      // 將角度轉換為跑道數字格式 (除以10)
+      const runwayNumber = i === 360 ? 36 : i / 10;
+      label.innerText = runwayNumber;
       canvas.appendChild(label);
-    });
+    }
     
     const directions = [
       { label: 'N', deg: 0 },
