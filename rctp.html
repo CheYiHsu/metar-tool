@@ -8,15 +8,27 @@
     body { font-family: sans-serif; text-align: center; padding: 20px; background-color: white; }
     #canvas { width: 300px; height: 300px; margin: 0 auto; border: 1px solid #ccc; border-radius: 50%; position: relative; }
     #windArrow {
-      width: 0;
-      height: 0;
-      border-left: 8px solid transparent;
-      border-right: 8px solid transparent;
-      border-bottom: 150px solid red;
       position: absolute;
-      top: 0;
-      left: 146px;
-      transform-origin: bottom center;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      font-size: 60px;
+      color: #0066cc;
+      filter: drop-shadow(2px 2px 4px rgba(0,0,0,0.3));
+      transition: transform 0.5s ease;
+    }
+    #windSpeed {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      font-size: 18px;
+      font-weight: bold;
+      color: #333;
+      background: rgba(255,255,255,0.9);
+      padding: 2px 6px;
+      border-radius: 3px;
+      pointer-events: none;
     }
     .info { margin-top: 20px; font-size: 18px; }
     .red { color: red; }
@@ -124,7 +136,7 @@
     </select>
     <button onclick="fetchMETAR()">立即更新</button>
     <label>
-      <input type="checkbox" id="autoUpdate" checked> 自動更新（每5分鐘）
+      <input type="checkbox" id="autoUpdate" checked> 自動更新（每小時）
     </label>
   </div>
 
@@ -137,18 +149,31 @@
 
   <div id="canvas">
     <div id="runway"></div>
-    <div id="windArrow"></div>
+    <div id="windArrow">↓</div>
+    <div id="windSpeed"></div>
   </div>
 
   <div class="explanation">
     <h3>資訊說明：</h3>
     <ul>
       <li><strong>機場 ICAO 代碼</strong>：顯示報告所屬機場代碼，例如 RCTP。</li>
-      <li><strong>天氣圖示</strong>：☀️（晴天）、🌧️（降雨）、🌫️（霧）、⛈️（雷雨）、❓（不明天氣）。</li>
+      <li><strong>天氣圖示</strong>：
+        <ul>
+          <li>☀️ 晴天（SKC/CLR/CAVOK/NSC）</li>
+          <li>⛅ 少雲/疏雲（FEW/SCT）</li>
+          <li>☁️ 多雲/密雲（BKN/OVC）</li>
+          <li>🌦️ 陣雨（SH）</li>
+          <li>🌧️ 雨/細雨（RA/DZ）</li>
+          <li>⛈️ 雷雨（TS）</li>
+          <li>🌨️ 雪/冰雹（SN/SG/GR）</li>
+          <li>🌫️ 霧/輕霧/霾（FG/BR/HZ）</li>
+        </ul>
+      </li>
       <li><strong>飛行條件分類</strong>：依據能見度與雲底高，分為 VFR、MVFR、IFR、LIFR。</li>
       <li><strong>氣象數據</strong>：顯示溫度、露點、能見度、雲底高度、氣壓。</li>
       <li><strong>推薦跑道號碼</strong>：依據風向與跑道角度推薦最佳使用跑道。</li>
       <li><strong>風與跑道角度差</strong>：指出風向與跑道方向的夾角，幫助判斷是否為順風、側風。</li>
+      <li><strong>更新頻率</strong>：METAR 通常每小時更新一次。本工具預設每小時自動更新。</li>
     </ul>
   </div>
 
@@ -356,12 +381,31 @@
       // 氣壓
       const pressure = pressureMatch ? pressureMatch[1] + " hPa" : "N/A";
       
-      // 天氣現象
-      let icon = "☀️";
-      if (metarText.includes('TS')) icon = "⛈️";
-      else if (metarText.includes('RA') || metarText.includes('SH')) icon = "🌧️";
-      else if (metarText.includes('BR') || metarText.includes('FG')) icon = "🌫️";
-      else if (metarText.includes('SN')) icon = "🌨️";
+      // 天氣現象 - 完整的天氣代碼對應
+      let icon = "☀️"; // 預設晴天
+      
+      // 按優先順序檢查天氣現象（嚴重的天氣優先）
+      if (metarText.includes('TS')) {
+        icon = "⛈️"; // 雷雨
+      } else if (metarText.includes('SN') || metarText.includes('SG')) {
+        icon = "🌨️"; // 雪
+      } else if (metarText.includes('GR')) {
+        icon = "🌨️"; // 冰雹（使用雪的圖示）
+      } else if (metarText.includes('RA') || metarText.includes('DZ')) {
+        icon = "🌧️"; // 雨或細雨
+      } else if (metarText.includes('SH')) {
+        icon = "🌦️"; // 陣雨
+      } else if (metarText.includes('FG')) {
+        icon = "🌫️"; // 霧
+      } else if (metarText.includes('BR') || metarText.includes('HZ')) {
+        icon = "🌫️"; // 輕霧或霾
+      } else if (metarText.includes('FEW') || metarText.includes('SCT')) {
+        icon = "⛅"; // 少雲或疏雲
+      } else if (metarText.includes('BKN') || metarText.includes('OVC')) {
+        icon = "☁️"; // 裂雲或密雲
+      } else if (metarText.includes('SKC') || metarText.includes('CLR') || metarText.includes('CAVOK') || metarText.includes('NSC')) {
+        icon = "☀️"; // 晴空
+      }
       
       // 飛行類別
       let category = "VFR";
@@ -375,8 +419,21 @@
       
       // 更新風向箭頭
       const windArrow = document.getElementById("windArrow");
-      const rotation = (dir + 180) % 360;
-      windArrow.style.transform = `rotate(${rotation}deg)`;
+      const windSpeedDiv = document.getElementById("windSpeed");
+      
+      // 風向是風的來向，箭頭指向風吹來的方向
+      windArrow.style.transform = `translate(-50%, -50%) rotate(${dir}deg)`;
+      
+      // 顯示風速在中央
+      if (windMatch && windMatch[1] !== 'VRB') {
+        windSpeedDiv.textContent = speed + ' kt';
+      } else if (windMatch && windMatch[1] === 'VRB') {
+        windSpeedDiv.textContent = 'VRB ' + speed + ' kt';
+        windArrow.style.display = 'none'; // 可變風向時隱藏箭頭
+      } else {
+        windSpeedDiv.textContent = 'Calm';
+        windArrow.style.display = 'none'; // 無風時隱藏箭頭
+      }
       
       // 更新跑道方向
       const rwy = runwayMap[icao] || [50, 230];
@@ -417,8 +474,8 @@
       if (checkbox.checked) {
         // 立即更新一次
         fetchMETAR();
-        // 每5分鐘更新
-        autoUpdateInterval = setInterval(fetchMETAR, 300000);
+        // 每小時更新（3600000 毫秒）
+        autoUpdateInterval = setInterval(fetchMETAR, 3600000);
       } else {
         clearInterval(autoUpdateInterval);
       }
