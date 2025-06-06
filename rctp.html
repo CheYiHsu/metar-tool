@@ -194,7 +194,7 @@
 
     let autoUpdateInterval;
 
-    // 從 AVWX API 取得 METAR
+    // 從 API 取得 METAR
     async function fetchMETAR() {
       const icao = document.getElementById('airportSelect').value;
       const updateInfo = document.getElementById('updateInfo');
@@ -204,90 +204,156 @@
       errorMessage.textContent = '';
       
       try {
-        // 使用 CORS proxy 來避免 CORS 問題
-        const proxyUrl = 'https://corsproxy.io/?';
-        const apiUrl = `https://avwx.rest/api/metar/${icao}`;
+        // 嘗試多個 CORS proxy
+        const proxyUrls = [
+          'https://api.allorigins.win/raw?url=',
+          'https://cors-anywhere.herokuapp.com/',
+          'https://corsproxy.io/?'
+        ];
         
-        const response = await fetch(proxyUrl + encodeURIComponent(apiUrl), {
-          headers: {
-            'Accept': 'application/json'
+        let data = null;
+        let lastError = null;
+        
+        // 使用 CheckWX API (通常更穩定)
+        for (const proxyUrl of proxyUrls) {
+          try {
+            const apiUrl = `https://metar.vatsim.net/metar.php?id=${icao}`;
+            const response = await fetch(proxyUrl + encodeURIComponent(apiUrl));
+            
+            if (response.ok) {
+              const text = await response.text();
+              if (text && text.includes('METAR')) {
+                // 解析純文字 METAR
+                const metarText = text.trim();
+                document.getElementById('rawMetar').textContent = `原始 METAR: ${metarText}`;
+                document.getElementById('rawMetar').style.display = 'block';
+                parseMETARText(metarText);
+                updateInfo.innerHTML = `最後更新時間: ${new Date().toLocaleString('zh-TW')}`;
+                return;
+              }
+            }
+          } catch (e) {
+            lastError = e;
+            continue;
           }
-        });
-        
-        if (!response.ok) {
-          throw new Error('無法取得天氣資料');
         }
         
-        const data = await response.json();
+        // 如果所有 proxy 都失敗，嘗試使用 Weather.gov
+        const weatherGovUrl = `https://api.weather.gov/stations/${icao}/observations/latest`;
+        const weatherResponse = await fetch(weatherGovUrl);
         
-        if (data.raw) {
-          document.getElementById('rawMetar').textContent = `原始 METAR: ${data.raw}`;
-          document.getElementById('rawMetar').style.display = 'block';
-          parseMETARData(data);
-          updateInfo.innerHTML = `最後更新時間: ${new Date().toLocaleString('zh-TW')}`;
-        } else {
-          throw new Error('收到的資料格式不正確');
+        if (weatherResponse.ok) {
+          const weatherData = await weatherResponse.json();
+          if (weatherData.properties && weatherData.properties.rawMessage) {
+            const metarText = weatherData.properties.rawMessage;
+            document.getElementById('rawMetar').textContent = `原始 METAR: ${metarText}`;
+            document.getElementById('rawMetar').style.display = 'block';
+            parseMETARText(metarText);
+            updateInfo.innerHTML = `最後更新時間: ${new Date().toLocaleString('zh-TW')}`;
+            return;
+          }
         }
+        
+        throw new Error('無法從任何來源取得天氣資料');
       } catch (error) {
         console.error('Error fetching METAR:', error);
         errorMessage.textContent = `錯誤：${error.message}。請稍後再試。`;
         updateInfo.innerHTML = '';
         
-        // 提供備用方案
-        errorMessage.innerHTML += '<br>您也可以從 <a href="https://www.aviationweather.gov/metar" target="_blank">Aviation Weather</a> 手動取得 METAR 資料。';
+        // 提供備用方案和手動輸入選項
+        errorMessage.innerHTML += '<br>您也可以：<br>' +
+          '1. 從 <a href="https://www.aviationweather.gov/metar/data?ids=' + icao + '" target="_blank">Aviation Weather</a> 複製 METAR<br>' +
+          '2. 或使用以下輸入框手動貼上 METAR：<br>' +
+          '<textarea id="manualMetar" rows="3" cols="60" placeholder="貼上 METAR 資料..."></textarea>' +
+          '<button onclick="parseManualMETAR()">解析</button>';
+      }
+    }
+    
+    // 手動解析 METAR
+    function parseManualMETAR() {
+      const metarText = document.getElementById('manualMetar').value;
+      if (metarText) {
+        document.getElementById('rawMetar').textContent = `原始 METAR: ${metarText}`;
+        document.getElementById('rawMetar').style.display = 'block';
+        parseMETARText(metarText);
+        document.getElementById('errorMessage').textContent = '';
+        document.getElementById('updateInfo').innerHTML = `手動更新時間: ${new Date().toLocaleString('zh-TW')}`;
       }
     }
 
-    // 解析 METAR 資料（使用 AVWX API 的結構化資料）
-    function parseMETARData(data) {
-      const icao = data.station;
+    // 解析純文字 METAR
+    function parseMETARText(metarText) {
+      const icaoMatch = metarText.match(/(?:METAR\s+)?(\w{4})/);
+      const windMatch = metarText.match(/(\d{3}|VRB)(\d{2,3})(?:G\d{2,3})?KT/);
+      const tempMatch = metarText.match(/\s(M?\d{2})\/(M?\d{2})\s/);
+      const visMatch = metarText.match(/\s(\d{4})\s/);
+      const ceilingMatch = metarText.match(/(?:BKN|OVC)(\d{3})/);
+      const pressureMatch = metarText.match(/Q(\d{4})/);
+      
+      if (!icaoMatch) {
+        alert("無法解析 METAR 資料");
+        return;
+      }
+      
+      const icao = icaoMatch[1];
       
       // 風向風速
       let dir = 0, speed = 0;
-      if (data.wind_direction && data.wind_direction.repr !== 'VRB') {
-        dir = parseInt(data.wind_direction.repr);
-      }
-      if (data.wind_speed) {
-        speed = parseInt(data.wind_speed.repr);
+      if (windMatch) {
+        if (windMatch[1] === 'VRB') {
+          dir = 0; // 可變風向
+        } else {
+          dir = parseInt(windMatch[1]);
+        }
+        speed = parseInt(windMatch[2]);
       }
       
       // 溫度和露點
-      const temp = data.temperature ? data.temperature.repr + "°C" : "N/A";
-      const dewpoint = data.dewpoint ? data.dewpoint.repr + "°C" : "N/A";
+      let temp = "N/A", dewpoint = "N/A";
+      if (tempMatch) {
+        temp = tempMatch[1].replace('M', '-') + "°C";
+        dewpoint = tempMatch[2].replace('M', '-') + "°C";
+      }
       
       // 能見度
       let vis = "N/A", visVal = 9999;
-      if (data.visibility) {
-        visVal = parseInt(data.visibility.repr) * 1609; // 轉換英里到公尺
+      if (visMatch) {
+        visVal = parseInt(visMatch[1]);
         vis = (visVal / 1000).toFixed(1) + " km";
+      } else if (metarText.includes('9999')) {
+        visVal = 9999;
+        vis = "10+ km";
       }
       
       // 雲層高度
       let ceil = "N/A", ceilVal = 10000;
-      if (data.clouds && data.clouds.length > 0) {
-        for (let cloud of data.clouds) {
-          if (cloud.type === 'BKN' || cloud.type === 'OVC') {
-            ceilVal = parseInt(cloud.altitude) * 100;
-            ceil = ceilVal + " ft";
-            break;
-          }
-        }
+      if (ceilingMatch) {
+        ceilVal = parseInt(ceilingMatch[1]) * 100;
+        ceil = ceilVal + " ft";
+      } else if (metarText.includes('CAVOK') || metarText.includes('NSC')) {
+        ceil = "無顯著雲層";
+        ceilVal = 10000;
       }
       
       // 氣壓
-      const pressure = data.altimeter ? Math.round(data.altimeter.value * 33.864) + " hPa" : "N/A";
+      const pressure = pressureMatch ? pressureMatch[1] + " hPa" : "N/A";
       
       // 天氣現象
       let icon = "☀️";
-      if (data.wx_codes) {
-        const wx = data.wx_codes.join('');
-        if (wx.includes('TS')) icon = "⛈️";
-        else if (wx.includes('RA') || wx.includes('SH')) icon = "🌧️";
-        else if (wx.includes('BR') || wx.includes('FG')) icon = "🌫️";
-      }
+      if (metarText.includes('TS')) icon = "⛈️";
+      else if (metarText.includes('RA') || metarText.includes('SH')) icon = "🌧️";
+      else if (metarText.includes('BR') || metarText.includes('FG')) icon = "🌫️";
+      else if (metarText.includes('SN')) icon = "🌨️";
       
       // 飛行類別
-      let category = data.flight_rules || "VFR";
+      let category = "VFR";
+      if (visVal < 1600 || ceilVal < 500) {
+        category = "LIFR";
+      } else if (visVal < 5000 || ceilVal < 1000) {
+        category = "IFR";
+      } else if (visVal < 8000 || ceilVal < 3000) {
+        category = "MVFR";
+      }
       
       // 更新風向箭頭
       const windArrow = document.getElementById("windArrow");
@@ -318,7 +384,7 @@
         <div><strong>天氣:</strong> ${icon}</div>
         <div><strong>飛行類別:</strong> <span class="${category === 'IFR' || category === 'LIFR' ? 'red' : ''}">${category}</span></div>
         <div><strong>溫度:</strong> ${temp} / <strong>露點:</strong> ${dewpoint}</div>
-        <div><strong>風向風速:</strong> ${dir}° @ ${speed} kt</div>
+        <div><strong>風向風速:</strong> ${windMatch ? (windMatch[1] === 'VRB' ? '可變' : dir + '°') : 'N/A'} @ ${speed} kt</div>
         <div><strong>能見度:</strong> ${vis}</div>
         <div><strong>雲底高度:</strong> <span class="${ceilVal < 3000 ? 'red' : ''}">${ceil}</span></div>
         <div><strong>氣壓:</strong> ${pressure}</div>
