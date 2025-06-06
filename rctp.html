@@ -362,30 +362,20 @@
         speed = parseInt(windMatch[2]);
       }
       
-      // 溫度和露點 - 調整正則表達式以匹配各種格式
+      // 溫度和露點
       let temp = "N/A", dewpoint = "N/A", humidity = "N/A";
-      let tempValue = null, dewpointValue = null;
-      
-      // 嘗試多種溫度格式匹配
-      const tempMatch = metarText.match(/\b(M?\d{2})\/(M?\d{2})\b/) || 
-                       metarText.match(/\s(M?\d{2})\/(M?\d{2})\s/) ||
-                       metarText.match(/KT\s+(M?\d{2})\/(M?\d{2})/);
-      
       if (tempMatch) {
         temp = tempMatch[1].replace('M', '-') + "°C";
         dewpoint = tempMatch[2].replace('M', '-') + "°C";
-        tempValue = parseFloat(tempMatch[1].replace('M', '-'));
-        dewpointValue = parseFloat(tempMatch[2].replace('M', '-'));
         
         // 計算相對濕度
+        const tempValue = parseFloat(tempMatch[1].replace('M', '-'));
+        const dewpointValue = parseFloat(tempMatch[2].replace('M', '-'));
+        
         if (!isNaN(tempValue) && !isNaN(dewpointValue)) {
-          // 使用 Magnus-Tetens 公式計算相對濕度
           const relativeHumidity = 100 * Math.exp((17.625 * dewpointValue) / (243.04 + dewpointValue)) / 
                                         Math.exp((17.625 * tempValue) / (243.04 + tempValue));
           humidity = Math.round(relativeHumidity) + "%";
-          
-          // 調試輸出
-          console.log('溫度:', tempValue, '露點:', dewpointValue, '濕度:', humidity);
         }
       }
       
@@ -485,17 +475,16 @@
       const angleToRwy = Math.min(diff1, diff2);
       const windType = angleToRwy <= 30 ? "順風" : angleToRwy >= 60 ? "側風" : "部分順風";
       
-      // 更新飛機位置和方向（對準跑道）
+      // 更新飛機位置和方向
       const approachPlane = document.getElementById("approachPlane");
-      const planeDistance = 100; // 距離中心的距離
-      const approachAngle = (bestRwyHeading + 180) % 360; // 進場方向（跑道相反方向）
+      const planeDistance = 100;
+      const approachAngle = (bestRwyHeading + 180) % 360;
       const planeRad = (approachAngle - 90) * Math.PI / 180;
       const planeX = 150 + planeDistance * Math.cos(planeRad);
       const planeY = 150 + planeDistance * Math.sin(planeRad);
       
       approachPlane.style.left = planeX + "px";
       approachPlane.style.top = planeY + "px";
-      // 飛機圖示旋轉角度 - 調整90度使飛機頭部對準跑道
       approachPlane.style.transform = `translate(-50%, -50%) rotate(${bestRwyHeading + 90}deg)`;
       
       // 更新顯示資訊
