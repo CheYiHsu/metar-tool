@@ -178,16 +178,18 @@
   </div>
 
   <script>
-    // 初始化羅盤標籤
+    // 初始化羅盤標籤 - 使用跑道方向數字（3, 6, 9, 12 等）
     const canvas = document.getElementById("canvas");
-    for (let i = 0; i < 360; i += 30) {
+    for (let i = 30; i <= 360; i += 30) {
       const label = document.createElement("div");
       label.className = "angle-label";
       const radius = 140;
       const rad = (i - 90) * Math.PI / 180;
       label.style.left = 150 + radius * Math.cos(rad) + "px";
       label.style.top = 150 + radius * Math.sin(rad) + "px";
-      label.innerText = i;
+      // 將角度轉換為跑道數字格式 (除以10)
+      const runwayNumber = i === 360 ? 36 : i / 10;
+      label.innerText = runwayNumber;
       canvas.appendChild(label);
     }
     
