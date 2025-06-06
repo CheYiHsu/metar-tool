@@ -1,10 +1,9 @@
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>METAR Visualizer</title>
+  <title>RCTP METAR 自動更新視覺化</title>
   <style>
     body { font-family: sans-serif; text-align: center; padding: 20px; background-color: white; }
     #canvas { width: 300px; height: 300px; margin: 0 auto; border: 1px solid #ccc; border-radius: 50%; position: relative; }
@@ -19,6 +18,9 @@
       left: 146px;
       transform-origin: bottom center;
     }
+    .info { margin-top: 20px; font-size: 18px; }
+    .red { color: red; }
+    .icon { width: 50px; vertical-align: middle; }
     #runway {
       position: absolute;
       width: 15px;
@@ -28,15 +30,19 @@
       left: 145px;
       transform-origin: center;
     }
-    .info { margin-top: 20px; font-size: 18px; }
-    .red { color: red; }
-    .icon { width: 50px; vertical-align: middle; }
-    .angle-label, .compass-label {
+    .angle-label {
       position: absolute;
+      font-size: 14px;
+      color: #555;
       transform: translate(-50%, -50%);
     }
-    .angle-label { font-size: 14px; color: #555; }
-    .compass-label { font-size: 12px; font-weight: bold; color: #222; }
+    .compass-label {
+      position: absolute;
+      font-size: 12px;
+      font-weight: bold;
+      color: #222;
+      transform: translate(-50%, -50%);
+    }
     .explanation {
       margin-top: 40px;
       padding-top: 20px;
@@ -48,17 +54,87 @@
       font-size: 16px;
       line-height: 1.6;
     }
+    .controls {
+      margin: 20px 0;
+    }
+    .controls select {
+      font-size: 16px;
+      padding: 5px 10px;
+      margin: 0 10px;
+    }
+    .controls button {
+      font-size: 16px;
+      padding: 5px 15px;
+      cursor: pointer;
+      background-color: #007bff;
+      color: white;
+      border: none;
+      border-radius: 4px;
+    }
+    .controls button:hover {
+      background-color: #0056b3;
+    }
+    .update-info {
+      margin: 10px 0;
+      font-size: 14px;
+      color: #666;
+    }
+    .loading {
+      display: inline-block;
+      width: 20px;
+      height: 20px;
+      border: 3px solid #f3f3f3;
+      border-top: 3px solid #007bff;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+      vertical-align: middle;
+      margin-left: 10px;
+    }
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+    .error {
+      color: red;
+      margin: 10px 0;
+    }
+    .raw-metar {
+      background-color: #f5f5f5;
+      padding: 10px;
+      border-radius: 4px;
+      font-family: monospace;
+      font-size: 14px;
+      margin: 20px auto;
+      max-width: 800px;
+      word-wrap: break-word;
+    }
   </style>
 </head>
 <body>
-  <h2>METAR Visualizer</h2>
-  <input type="text" id="icaoInput" placeholder="Enter ICAO code (e.g., RCTP)" />
-  <button onclick="fetchMETAR()">Fetch METAR</button>
-  <br><br>
-  <textarea id="metarInput" rows="5" cols="60" placeholder="Or paste METAR here..."></textarea><br><br>
-  <button onclick="parseMETAR()">Visualize</button>
+  <h2>機場 METAR 自動更新視覺化</h2>
+  
+  <div class="controls">
+    <label for="airportSelect">選擇機場：</label>
+    <select id="airportSelect">
+      <option value="RCTP">RCTP - 桃園國際機場</option>
+      <option value="RCSS">RCSS - 松山機場</option>
+      <option value="RCKH">RCKH - 高雄國際機場</option>
+      <option value="RCFN">RCFN - 台南機場</option>
+      <option value="RCMQ">RCMQ - 台中機場</option>
+    </select>
+    <button onclick="fetchMETAR()">立即更新</button>
+    <label>
+      <input type="checkbox" id="autoUpdate" checked> 自動更新（每5分鐘）
+    </label>
+  </div>
+
+  <div class="update-info" id="updateInfo"></div>
+  <div class="error" id="errorMessage"></div>
 
   <div class="info" id="weatherInfo"></div>
+  
+  <div class="raw-metar" id="rawMetar" style="display: none;"></div>
+
   <div id="canvas">
     <div id="runway"></div>
     <div id="windArrow"></div>
@@ -68,15 +144,16 @@
     <h3>資訊說明：</h3>
     <ul>
       <li><strong>機場 ICAO 代碼</strong>：顯示報告所屬機場代碼，例如 RCTP。</li>
-      <li><strong>天氣圖示</strong>：☀️（晴天）、🌧️（降雨）、🌫️（霧）、❓（不明天氣）。</li>
+      <li><strong>天氣圖示</strong>：☀️（晴天）、🌧️（降雨）、🌫️（霧）、⛈️（雷雨）、❓（不明天氣）。</li>
       <li><strong>飛行條件分類</strong>：依據能見度與雲底高，分為 VFR、MVFR、IFR、LIFR。</li>
-      <li><strong>氣象數據</strong>：顯示溫度、能見度、雲底高度、氣壓。</li>
-      <li><strong>推薦跑道號碼</strong>：依據風向與跑道角度推薦最佳使用跑道（05 或 23）。</li>
+      <li><strong>氣象數據</strong>：顯示溫度、露點、能見度、雲底高度、氣壓。</li>
+      <li><strong>推薦跑道號碼</strong>：依據風向與跑道角度推薦最佳使用跑道。</li>
       <li><strong>風與跑道角度差</strong>：指出風向與跑道方向的夾角，幫助判斷是否為順風、側風。</li>
     </ul>
   </div>
 
   <script>
+    // 初始化羅盤標籤
     const canvas = document.getElementById("canvas");
     for (let i = 0; i < 360; i += 30) {
       const label = document.createElement("div");
@@ -88,95 +165,191 @@
       label.innerText = i;
       canvas.appendChild(label);
     }
-    ['N', 'E', 'S', 'W'].forEach((label, i) => {
-      const rad = (i * 90 - 90) * Math.PI / 180;
-      const compass = document.createElement("div");
-      compass.className = "compass-label";
-      compass.style.left = 150 + 120 * Math.cos(rad) + "px";
-      compass.style.top = 150 + 120 * Math.sin(rad) + "px";
-      compass.innerText = label;
-      canvas.appendChild(compass);
+    
+    const directions = [
+      { label: 'N', deg: 0 },
+      { label: 'E', deg: 90 },
+      { label: 'S', deg: 180 },
+      { label: 'W', deg: 270 }
+    ];
+    directions.forEach(d => {
+      const dirLabel = document.createElement("div");
+      dirLabel.className = "compass-label";
+      const rad = (d.deg - 90) * Math.PI / 180;
+      const radius = 120;
+      dirLabel.style.left = 150 + radius * Math.cos(rad) + "px";
+      dirLabel.style.top = 150 + radius * Math.sin(rad) + "px";
+      dirLabel.innerText = d.label;
+      canvas.appendChild(dirLabel);
     });
 
+    // 跑道方向對照表
+    const runwayMap = {
+      RCTP: [50, 230],    // 05/23
+      RCSS: [100, 280],   // 10/28
+      RCKH: [90, 270],    // 09/27
+      RCFN: [90, 270],    // 09/27 (實際是 11/29，這裡簡化)
+      RCMQ: [40, 220]     // 04/22
+    };
+
+    let autoUpdateInterval;
+
+    // 從 AVWX API 取得 METAR
     async function fetchMETAR() {
-      const icao = document.getElementById("icaoInput").value.trim().toUpperCase();
-      if (!icao || icao.length !== 4) {
-        alert("請輸入正確的 4 碼 ICAO 代碼");
-        return;
-      }
+      const icao = document.getElementById('airportSelect').value;
+      const updateInfo = document.getElementById('updateInfo');
+      const errorMessage = document.getElementById('errorMessage');
+      
+      updateInfo.innerHTML = '正在獲取最新天氣資料... <span class="loading"></span>';
+      errorMessage.textContent = '';
+      
       try {
-        const url = `https://tgftp.nws.noaa.gov/data/observations/metar/stations/${icao}.TXT`;
-        const response = await fetch(url);
-        const text = await response.text();
-        const lines = text.trim().split("\n");
-        const metar = lines[1] || lines[0];
-        document.getElementById("metarInput").value = "METAR " + metar;
-        parseMETAR();
-      } catch (err) {
-        alert("無法取得 METAR 資料，請確認 ICAO 代碼或稍後再試");
+        // 使用 CORS proxy 來避免 CORS 問題
+        const proxyUrl = 'https://corsproxy.io/?';
+        const apiUrl = `https://avwx.rest/api/metar/${icao}`;
+        
+        const response = await fetch(proxyUrl + encodeURIComponent(apiUrl), {
+          headers: {
+            'Accept': 'application/json'
+          }
+        });
+        
+        if (!response.ok) {
+          throw new Error('無法取得天氣資料');
+        }
+        
+        const data = await response.json();
+        
+        if (data.raw) {
+          document.getElementById('rawMetar').textContent = `原始 METAR: ${data.raw}`;
+          document.getElementById('rawMetar').style.display = 'block';
+          parseMETARData(data);
+          updateInfo.innerHTML = `最後更新時間: ${new Date().toLocaleString('zh-TW')}`;
+        } else {
+          throw new Error('收到的資料格式不正確');
+        }
+      } catch (error) {
+        console.error('Error fetching METAR:', error);
+        errorMessage.textContent = `錯誤：${error.message}。請稍後再試。`;
+        updateInfo.innerHTML = '';
+        
+        // 提供備用方案
+        errorMessage.innerHTML += '<br>您也可以從 <a href="https://www.aviationweather.gov/metar" target="_blank">Aviation Weather</a> 手動取得 METAR 資料。';
       }
     }
 
-    function parseMETAR() {
-      const input = document.getElementById("metarInput").value;
-      const icaoMatch = input.match(/^METAR\s+(\w{4})/);
-      const windMatch = input.match(/(\d{3})(\d{2})KT/);
-      const tempMatch = input.match(/ (\d{2})\/(\d{2}) /);
-      const visMatch = input.match(/ (\d{4}) /);
-      const ceilingMatch = input.match(/BKN(\d{3})/);
-      const pressureMatch = input.match(/Q(\d{4})/);
-      const rain = /RA|SHRA/.test(input);
-      const mist = /BR/.test(input);
-      const clear = !rain && !mist;
-
-      if (!windMatch || !icaoMatch) {
-        alert("Missing METAR or wind data");
-        return;
+    // 解析 METAR 資料（使用 AVWX API 的結構化資料）
+    function parseMETARData(data) {
+      const icao = data.station;
+      
+      // 風向風速
+      let dir = 0, speed = 0;
+      if (data.wind_direction && data.wind_direction.repr !== 'VRB') {
+        dir = parseInt(data.wind_direction.repr);
       }
-
-      const icao = icaoMatch[1];
-      const dir = parseInt(windMatch[1]);
-      const speed = parseInt(windMatch[2]);
-      const temp = tempMatch ? tempMatch[1] + "°C" : "N/A";
-      const vis = visMatch ? (parseInt(visMatch[1]) / 1000).toFixed(1) + " km" : "N/A";
-      const visVal = visMatch ? parseInt(visMatch[1]) : 9999;
-      const ceil = ceilingMatch ? ceilingMatch[1] * 100 + " ft" : "N/A";
-      const ceilVal = ceilingMatch ? ceilingMatch[1] * 100 : 10000;
-      const pressure = pressureMatch ? pressureMatch[1] + " hPa" : "N/A";
-
-      let category = "VFR";
-      if (ceilVal < 500 && visVal < 1600) category = "LIFR";
-      else if (ceilVal < 1000 || visVal < 5000) category = (ceilVal < 1000 && visVal >= 5000) || (ceilVal >= 1000 && visVal < 5000) ? "MVFR" : "IFR";
-
-      document.getElementById("windArrow").style.transform = `rotate(${(dir + 180) % 360}deg)`;
-
-      const runwayMap = { RCTP: [50, 230] };
-      let rwy = runwayMap[icao] || [50, 230];
-      const rwy1 = rwy[0], rwy2 = rwy[1];
-      document.getElementById("runway").style.transform = `rotate(${rwy1}deg)`;
-
+      if (data.wind_speed) {
+        speed = parseInt(data.wind_speed.repr);
+      }
+      
+      // 溫度和露點
+      const temp = data.temperature ? data.temperature.repr + "°C" : "N/A";
+      const dewpoint = data.dewpoint ? data.dewpoint.repr + "°C" : "N/A";
+      
+      // 能見度
+      let vis = "N/A", visVal = 9999;
+      if (data.visibility) {
+        visVal = parseInt(data.visibility.repr) * 1609; // 轉換英里到公尺
+        vis = (visVal / 1000).toFixed(1) + " km";
+      }
+      
+      // 雲層高度
+      let ceil = "N/A", ceilVal = 10000;
+      if (data.clouds && data.clouds.length > 0) {
+        for (let cloud of data.clouds) {
+          if (cloud.type === 'BKN' || cloud.type === 'OVC') {
+            ceilVal = parseInt(cloud.altitude) * 100;
+            ceil = ceilVal + " ft";
+            break;
+          }
+        }
+      }
+      
+      // 氣壓
+      const pressure = data.altimeter ? Math.round(data.altimeter.value * 33.864) + " hPa" : "N/A";
+      
+      // 天氣現象
+      let icon = "☀️";
+      if (data.wx_codes) {
+        const wx = data.wx_codes.join('');
+        if (wx.includes('TS')) icon = "⛈️";
+        else if (wx.includes('RA') || wx.includes('SH')) icon = "🌧️";
+        else if (wx.includes('BR') || wx.includes('FG')) icon = "🌫️";
+      }
+      
+      // 飛行類別
+      let category = data.flight_rules || "VFR";
+      
+      // 更新風向箭頭
+      const windArrow = document.getElementById("windArrow");
+      const rotation = (dir + 180) % 360;
+      windArrow.style.transform = `rotate(${rotation}deg)`;
+      
+      // 更新跑道方向
+      const rwy = runwayMap[icao] || [50, 230];
+      const rwy1 = rwy[0];
+      const rwy2 = rwy[1];
+      const runwayHeading = rwy1;
+      document.getElementById("runway").style.transform = `rotate(${runwayHeading}deg)`;
+      
+      // 計算最佳跑道
       function angleDiff(a, b) {
         let diff = Math.abs(a - b) % 360;
         return diff > 180 ? 360 - diff : diff;
       }
-      const diff1 = angleDiff(dir, rwy1), diff2 = angleDiff(dir, rwy2);
+      const diff1 = angleDiff(dir, rwy1);
+      const diff2 = angleDiff(dir, rwy2);
       const bestRwy = diff1 < diff2 ? String(Math.round(rwy1 / 10)).padStart(2, '0') : String(Math.round(rwy2 / 10)).padStart(2, '0');
       const angleToRwy = Math.min(diff1, diff2);
-      const windType = angleToRwy <= 30 ? "Headwind" : angleToRwy >= 60 ? "Crosswind" : "Partial headwind";
-
-      const icon = clear ? "☀️" : rain ? "🌧️" : mist ? "🌫️" : "❓";
+      const windType = angleToRwy <= 30 ? "順風" : angleToRwy >= 60 ? "側風" : "部分順風";
+      
+      // 更新顯示資訊
       document.getElementById("weatherInfo").innerHTML = `
-        <div><strong>Airport:</strong> ${icao}</div>
-        <div><strong>Weather:</strong> ${icon}</div>
-        <div><strong>Flight Category:</strong> <span class="${category === 'IFR' ? 'red' : 'gray'}">${category}</span></div>
-        <div><strong>Temp:</strong> ${temp}</div>
-        <div><strong>Visibility:</strong> ${vis}</div>
-        <div><strong>Ceiling:</strong> <span class="red">${ceil}</span></div>
-        <div><strong>Pressure:</strong> ${pressure}</div>
-        <div><strong>Best Runway:</strong> ${bestRwy}</div>
-        <div><strong>Wind vs Runway:</strong> ${angleToRwy}° – ${windType}</div>
+        <div><strong>機場:</strong> ${icao}</div>
+        <div><strong>天氣:</strong> ${icon}</div>
+        <div><strong>飛行類別:</strong> <span class="${category === 'IFR' || category === 'LIFR' ? 'red' : ''}">${category}</span></div>
+        <div><strong>溫度:</strong> ${temp} / <strong>露點:</strong> ${dewpoint}</div>
+        <div><strong>風向風速:</strong> ${dir}° @ ${speed} kt</div>
+        <div><strong>能見度:</strong> ${vis}</div>
+        <div><strong>雲底高度:</strong> <span class="${ceilVal < 3000 ? 'red' : ''}">${ceil}</span></div>
+        <div><strong>氣壓:</strong> ${pressure}</div>
+        <div><strong>建議跑道:</strong> ${bestRwy}</div>
+        <div><strong>風向夾角:</strong> ${angleToRwy}° – ${windType}</div>
       `;
     }
+
+    // 自動更新控制
+    function toggleAutoUpdate() {
+      const checkbox = document.getElementById('autoUpdate');
+      if (checkbox.checked) {
+        // 立即更新一次
+        fetchMETAR();
+        // 每5分鐘更新
+        autoUpdateInterval = setInterval(fetchMETAR, 300000);
+      } else {
+        clearInterval(autoUpdateInterval);
+      }
+    }
+
+    // 監聽自動更新開關
+    document.getElementById('autoUpdate').addEventListener('change', toggleAutoUpdate);
+
+    // 監聽機場選擇變更
+    document.getElementById('airportSelect').addEventListener('change', fetchMETAR);
+
+    // 頁面載入時自動獲取一次
+    window.onload = function() {
+      toggleAutoUpdate();
+    };
   </script>
 </body>
 </html>
