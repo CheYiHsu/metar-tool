@@ -355,22 +355,21 @@
       }
       
       // 溫度和露點
-      let temp = "N/A", dewpoint = "N/A";
+      let temp = "N/A", dewpoint = "N/A", humidity = "N/A";
       let tempValue = null, dewpointValue = null;
       if (tempMatch) {
         temp = tempMatch[1].replace('M', '-') + "°C";
         dewpoint = tempMatch[2].replace('M', '-') + "°C";
         tempValue = parseFloat(tempMatch[1].replace('M', '-'));
         dewpointValue = parseFloat(tempMatch[2].replace('M', '-'));
-      }
-      
-      // 計算相對濕度
-      let humidity = "N/A";
-      if (tempValue !== null && dewpointValue !== null) {
-        // 使用簡化的相對濕度公式
-        const relativeHumidity = 100 * Math.exp((17.625 * dewpointValue) / (243.04 + dewpointValue)) / 
-                                      Math.exp((17.625 * tempValue) / (243.04 + tempValue));
-        humidity = Math.round(relativeHumidity) + "%";
+        
+        // 計算相對濕度
+        if (tempValue !== null && dewpointValue !== null) {
+          // 使用簡化的相對濕度公式
+          const relativeHumidity = 100 * Math.exp((17.625 * dewpointValue) / (243.04 + dewpointValue)) / 
+                                        Math.exp((17.625 * tempValue) / (243.04 + tempValue));
+          humidity = Math.round(relativeHumidity) + "%";
+        }
       }
       
       // 能見度
