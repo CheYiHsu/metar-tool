@@ -1,0 +1,182 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>METAR Visualizer</title>
+  <style>
+    body { font-family: sans-serif; text-align: center; padding: 20px; background-color: white; }
+    #canvas { width: 300px; height: 300px; margin: 0 auto; border: 1px solid #ccc; border-radius: 50%; position: relative; }
+    #windArrow {
+      width: 0;
+      height: 0;
+      border-left: 8px solid transparent;
+      border-right: 8px solid transparent;
+      border-bottom: 150px solid red;
+      position: absolute;
+      top: 0;
+      left: 146px;
+      transform-origin: bottom center;
+    }
+    #runway {
+      position: absolute;
+      width: 15px;
+      height: 180px;
+      background: black;
+      top: 60px;
+      left: 145px;
+      transform-origin: center;
+    }
+    .info { margin-top: 20px; font-size: 18px; }
+    .red { color: red; }
+    .icon { width: 50px; vertical-align: middle; }
+    .angle-label, .compass-label {
+      position: absolute;
+      transform: translate(-50%, -50%);
+    }
+    .angle-label { font-size: 14px; color: #555; }
+    .compass-label { font-size: 12px; font-weight: bold; color: #222; }
+    .explanation {
+      margin-top: 40px;
+      padding-top: 20px;
+      border-top: 1px solid #ccc;
+      text-align: left;
+      max-width: 600px;
+      margin-left: auto;
+      margin-right: auto;
+      font-size: 16px;
+      line-height: 1.6;
+    }
+  </style>
+</head>
+<body>
+  <h2>METAR Visualizer</h2>
+  <input type="text" id="icaoInput" placeholder="Enter ICAO code (e.g., RCTP)" />
+  <button onclick="fetchMETAR()">Fetch METAR</button>
+  <br><br>
+  <textarea id="metarInput" rows="5" cols="60" placeholder="Or paste METAR here..."></textarea><br><br>
+  <button onclick="parseMETAR()">Visualize</button>
+
+  <div class="info" id="weatherInfo"></div>
+  <div id="canvas">
+    <div id="runway"></div>
+    <div id="windArrow"></div>
+  </div>
+
+  <div class="explanation">
+    <h3>資訊說明：</h3>
+    <ul>
+      <li><strong>機場 ICAO 代碼</strong>：顯示報告所屬機場代碼，例如 RCTP。</li>
+      <li><strong>天氣圖示</strong>：☀️（晴天）、🌧️（降雨）、🌫️（霧）、❓（不明天氣）。</li>
+      <li><strong>飛行條件分類</strong>：依據能見度與雲底高，分為 VFR、MVFR、IFR、LIFR。</li>
+      <li><strong>氣象數據</strong>：顯示溫度、能見度、雲底高度、氣壓。</li>
+      <li><strong>推薦跑道號碼</strong>：依據風向與跑道角度推薦最佳使用跑道（05 或 23）。</li>
+      <li><strong>風與跑道角度差</strong>：指出風向與跑道方向的夾角，幫助判斷是否為順風、側風。</li>
+    </ul>
+  </div>
+
+  <script>
+    const canvas = document.getElementById("canvas");
+    for (let i = 0; i < 360; i += 30) {
+      const label = document.createElement("div");
+      label.className = "angle-label";
+      const radius = 140;
+      const rad = (i - 90) * Math.PI / 180;
+      label.style.left = 150 + radius * Math.cos(rad) + "px";
+      label.style.top = 150 + radius * Math.sin(rad) + "px";
+      label.innerText = i;
+      canvas.appendChild(label);
+    }
+    ['N', 'E', 'S', 'W'].forEach((label, i) => {
+      const rad = (i * 90 - 90) * Math.PI / 180;
+      const compass = document.createElement("div");
+      compass.className = "compass-label";
+      compass.style.left = 150 + 120 * Math.cos(rad) + "px";
+      compass.style.top = 150 + 120 * Math.sin(rad) + "px";
+      compass.innerText = label;
+      canvas.appendChild(compass);
+    });
+
+    async function fetchMETAR() {
+      const icao = document.getElementById("icaoInput").value.trim().toUpperCase();
+      if (!icao || icao.length !== 4) {
+        alert("請輸入正確的 4 碼 ICAO 代碼");
+        return;
+      }
+      try {
+        const url = `https://tgftp.nws.noaa.gov/data/observations/metar/stations/${icao}.TXT`;
+        const response = await fetch(url);
+        const text = await response.text();
+        const lines = text.trim().split("\n");
+        const metar = lines[1] || lines[0];
+        document.getElementById("metarInput").value = "METAR " + metar;
+        parseMETAR();
+      } catch (err) {
+        alert("無法取得 METAR 資料，請確認 ICAO 代碼或稍後再試");
+      }
+    }
+
+    function parseMETAR() {
+      const input = document.getElementById("metarInput").value;
+      const icaoMatch = input.match(/^METAR\s+(\w{4})/);
+      const windMatch = input.match(/(\d{3})(\d{2})KT/);
+      const tempMatch = input.match(/ (\d{2})\/(\d{2}) /);
+      const visMatch = input.match(/ (\d{4}) /);
+      const ceilingMatch = input.match(/BKN(\d{3})/);
+      const pressureMatch = input.match(/Q(\d{4})/);
+      const rain = /RA|SHRA/.test(input);
+      const mist = /BR/.test(input);
+      const clear = !rain && !mist;
+
+      if (!windMatch || !icaoMatch) {
+        alert("Missing METAR or wind data");
+        return;
+      }
+
+      const icao = icaoMatch[1];
+      const dir = parseInt(windMatch[1]);
+      const speed = parseInt(windMatch[2]);
+      const temp = tempMatch ? tempMatch[1] + "°C" : "N/A";
+      const vis = visMatch ? (parseInt(visMatch[1]) / 1000).toFixed(1) + " km" : "N/A";
+      const visVal = visMatch ? parseInt(visMatch[1]) : 9999;
+      const ceil = ceilingMatch ? ceilingMatch[1] * 100 + " ft" : "N/A";
+      const ceilVal = ceilingMatch ? ceilingMatch[1] * 100 : 10000;
+      const pressure = pressureMatch ? pressureMatch[1] + " hPa" : "N/A";
+
+      let category = "VFR";
+      if (ceilVal < 500 && visVal < 1600) category = "LIFR";
+      else if (ceilVal < 1000 || visVal < 5000) category = (ceilVal < 1000 && visVal >= 5000) || (ceilVal >= 1000 && visVal < 5000) ? "MVFR" : "IFR";
+
+      document.getElementById("windArrow").style.transform = `rotate(${(dir + 180) % 360}deg)`;
+
+      const runwayMap = { RCTP: [50, 230] };
+      let rwy = runwayMap[icao] || [50, 230];
+      const rwy1 = rwy[0], rwy2 = rwy[1];
+      document.getElementById("runway").style.transform = `rotate(${rwy1}deg)`;
+
+      function angleDiff(a, b) {
+        let diff = Math.abs(a - b) % 360;
+        return diff > 180 ? 360 - diff : diff;
+      }
+      const diff1 = angleDiff(dir, rwy1), diff2 = angleDiff(dir, rwy2);
+      const bestRwy = diff1 < diff2 ? String(Math.round(rwy1 / 10)).padStart(2, '0') : String(Math.round(rwy2 / 10)).padStart(2, '0');
+      const angleToRwy = Math.min(diff1, diff2);
+      const windType = angleToRwy <= 30 ? "Headwind" : angleToRwy >= 60 ? "Crosswind" : "Partial headwind";
+
+      const icon = clear ? "☀️" : rain ? "🌧️" : mist ? "🌫️" : "❓";
+      document.getElementById("weatherInfo").innerHTML = `
+        <div><strong>Airport:</strong> ${icao}</div>
+        <div><strong>Weather:</strong> ${icon}</div>
+        <div><strong>Flight Category:</strong> <span class="${category === 'IFR' ? 'red' : 'gray'}">${category}</span></div>
+        <div><strong>Temp:</strong> ${temp}</div>
+        <div><strong>Visibility:</strong> ${vis}</div>
+        <div><strong>Ceiling:</strong> <span class="red">${ceil}</span></div>
+        <div><strong>Pressure:</strong> ${pressure}</div>
+        <div><strong>Best Runway:</strong> ${bestRwy}</div>
+        <div><strong>Wind vs Runway:</strong> ${angleToRwy}° – ${windType}</div>
+      `;
+    }
+  </script>
+</body>
+</html>
