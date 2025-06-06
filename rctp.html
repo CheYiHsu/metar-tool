@@ -339,8 +339,8 @@
     function parseMETARText(metarText) {
       const icaoMatch = metarText.match(/(?:METAR\s+)?(\w{4})/);
       const windMatch = metarText.match(/(\d{3}|VRB)(\d{2,3})(?:G\d{2,3})?KT/);
-      const tempMatch = metarText.match(/\s(M?\d{2})\/(M?\d{2})\s/);
-      const visMatch = metarText.match(/\s(\d{4})\s/);
+      const tempMatch = metarText.match(/(M?\d{2})\/(M?\d{2})/);
+      const visMatch = metarText.match(/(\d{4})\s/);
       const ceilingMatch = metarText.match(/(?:BKN|OVC)(\d{3})/);
       const pressureMatch = metarText.match(/Q(\d{4})/);
       
@@ -362,9 +362,15 @@
         speed = parseInt(windMatch[2]);
       }
       
-      // 溫度和露點
+      // 溫度和露點 - 調整正則表達式以匹配各種格式
       let temp = "N/A", dewpoint = "N/A", humidity = "N/A";
       let tempValue = null, dewpointValue = null;
+      
+      // 嘗試多種溫度格式匹配
+      const tempMatch = metarText.match(/\b(M?\d{2})\/(M?\d{2})\b/) || 
+                       metarText.match(/\s(M?\d{2})\/(M?\d{2})\s/) ||
+                       metarText.match(/KT\s+(M?\d{2})\/(M?\d{2})/);
+      
       if (tempMatch) {
         temp = tempMatch[1].replace('M', '-') + "°C";
         dewpoint = tempMatch[2].replace('M', '-') + "°C";
@@ -372,11 +378,14 @@
         dewpointValue = parseFloat(tempMatch[2].replace('M', '-'));
         
         // 計算相對濕度
-        if (tempValue !== null && dewpointValue !== null) {
-          // 使用簡化的相對濕度公式
+        if (!isNaN(tempValue) && !isNaN(dewpointValue)) {
+          // 使用 Magnus-Tetens 公式計算相對濕度
           const relativeHumidity = 100 * Math.exp((17.625 * dewpointValue) / (243.04 + dewpointValue)) / 
                                         Math.exp((17.625 * tempValue) / (243.04 + tempValue));
           humidity = Math.round(relativeHumidity) + "%";
+          
+          // 調試輸出
+          console.log('溫度:', tempValue, '露點:', dewpointValue, '濕度:', humidity);
         }
       }
       
@@ -476,7 +485,7 @@
       const angleToRwy = Math.min(diff1, diff2);
       const windType = angleToRwy <= 30 ? "順風" : angleToRwy >= 60 ? "側風" : "部分順風";
       
-      // 更新飛機位置（在最佳跑道的進場端）
+      // 更新飛機位置和方向（對準跑道）
       const approachPlane = document.getElementById("approachPlane");
       const planeDistance = 100; // 距離中心的距離
       const approachAngle = (bestRwyHeading + 180) % 360; // 進場方向（跑道相反方向）
@@ -486,7 +495,8 @@
       
       approachPlane.style.left = planeX + "px";
       approachPlane.style.top = planeY + "px";
-      approachPlane.style.transform = `translate(-50%, -50%) rotate(${bestRwyHeading}deg)`;
+      // 飛機圖示旋轉角度 - 調整90度使飛機頭部對準跑道
+      approachPlane.style.transform = `translate(-50%, -50%) rotate(${bestRwyHeading + 90}deg)`;
       
       // 更新顯示資訊
       document.getElementById("weatherInfo").innerHTML = `
