@@ -171,7 +171,7 @@
         </ul>
       </li>
       <li><strong>飛行條件分類</strong>：依據能見度與雲底高，分為 VFR、MVFR、IFR、LIFR。</li>
-      <li><strong>氣象數據</strong>：顯示溫度、露點、能見度、雲底高度、氣壓。</li>
+      <li><strong>氣象數據</strong>：顯示溫度、露點、相對濕度、能見度、雲底高度、氣壓。</li>
       <li><strong>推薦跑道號碼</strong>：依據風向與跑道角度推薦最佳使用跑道。</li>
       <li><strong>風與跑道角度差</strong>：指出風向與跑道方向的夾角，幫助判斷是否為順風、側風。</li>
       <li><strong>更新頻率</strong>：METAR 通常每小時更新一次。本工具預設每小時自動更新。</li>
@@ -356,9 +356,21 @@
       
       // 溫度和露點
       let temp = "N/A", dewpoint = "N/A";
+      let tempValue = null, dewpointValue = null;
       if (tempMatch) {
         temp = tempMatch[1].replace('M', '-') + "°C";
         dewpoint = tempMatch[2].replace('M', '-') + "°C";
+        tempValue = parseFloat(tempMatch[1].replace('M', '-'));
+        dewpointValue = parseFloat(tempMatch[2].replace('M', '-'));
+      }
+      
+      // 計算相對濕度
+      let humidity = "N/A";
+      if (tempValue !== null && dewpointValue !== null) {
+        // 使用簡化的相對濕度公式
+        const relativeHumidity = 100 * Math.exp((17.625 * dewpointValue) / (243.04 + dewpointValue)) / 
+                                      Math.exp((17.625 * tempValue) / (243.04 + tempValue));
+        humidity = Math.round(relativeHumidity) + "%";
       }
       
       // 能見度
