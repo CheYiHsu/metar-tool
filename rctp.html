@@ -204,26 +204,39 @@
       errorMessage.textContent = '';
       
       try {
-        // 嘗試多個 CORS proxy
+        // 首先嘗試使用 Aviation Weather 官方 API
+        const aviationWeatherUrl = `https://aviationweather.gov/api/data/metar?ids=${icao}&format=raw&taf=false`;
+        
+        try {
+          const response = await fetch(aviationWeatherUrl);
+          if (response.ok) {
+            const text = await response.text();
+            if (text && !text.includes('No METAR found')) {
+              const metarText = text.trim();
+              document.getElementById('rawMetar').textContent = `原始 METAR: ${metarText}`;
+              document.getElementById('rawMetar').style.display = 'block';
+              parseMETARText(metarText);
+              updateInfo.innerHTML = `最後更新時間: ${new Date().toLocaleString('zh-TW')}`;
+              return;
+            }
+          }
+        } catch (e) {
+          console.log('Aviation Weather API failed, trying alternatives...');
+        }
+        
+        // 如果官方 API 失敗（可能是 CORS），使用 proxy
         const proxyUrls = [
           'https://api.allorigins.win/raw?url=',
-          'https://cors-anywhere.herokuapp.com/',
           'https://corsproxy.io/?'
         ];
         
-        let data = null;
-        let lastError = null;
-        
-        // 使用 CheckWX API (通常更穩定)
         for (const proxyUrl of proxyUrls) {
           try {
-            const apiUrl = `https://metar.vatsim.net/metar.php?id=${icao}`;
-            const response = await fetch(proxyUrl + encodeURIComponent(apiUrl));
+            const response = await fetch(proxyUrl + encodeURIComponent(aviationWeatherUrl));
             
             if (response.ok) {
               const text = await response.text();
-              if (text && text.includes('METAR')) {
-                // 解析純文字 METAR
+              if (text && !text.includes('No METAR found')) {
                 const metarText = text.trim();
                 document.getElementById('rawMetar').textContent = `原始 METAR: ${metarText}`;
                 document.getElementById('rawMetar').style.display = 'block';
@@ -233,24 +246,29 @@
               }
             }
           } catch (e) {
-            lastError = e;
             continue;
           }
         }
         
-        // 如果所有 proxy 都失敗，嘗試使用 Weather.gov
-        const weatherGovUrl = `https://api.weather.gov/stations/${icao}/observations/latest`;
-        const weatherResponse = await fetch(weatherGovUrl);
-        
-        if (weatherResponse.ok) {
-          const weatherData = await weatherResponse.json();
-          if (weatherData.properties && weatherData.properties.rawMessage) {
-            const metarText = weatherData.properties.rawMessage;
-            document.getElementById('rawMetar').textContent = `原始 METAR: ${metarText}`;
-            document.getElementById('rawMetar').style.display = 'block';
-            parseMETARText(metarText);
-            updateInfo.innerHTML = `最後更新時間: ${new Date().toLocaleString('zh-TW')}`;
-            return;
+        // 備用方案：VATSIM
+        for (const proxyUrl of proxyUrls) {
+          try {
+            const vatsimUrl = `https://metar.vatsim.net/metar.php?id=${icao}`;
+            const response = await fetch(proxyUrl + encodeURIComponent(vatsimUrl));
+            
+            if (response.ok) {
+              const text = await response.text();
+              if (text && text.includes('METAR')) {
+                const metarText = text.trim();
+                document.getElementById('rawMetar').textContent = `原始 METAR: ${metarText}`;
+                document.getElementById('rawMetar').style.display = 'block';
+                parseMETARText(metarText);
+                updateInfo.innerHTML = `最後更新時間: ${new Date().toLocaleString('zh-TW')} (來源: VATSIM)`;
+                return;
+              }
+            }
+          } catch (e) {
+            continue;
           }
         }
         
@@ -262,7 +280,7 @@
         
         // 提供備用方案和手動輸入選項
         errorMessage.innerHTML += '<br>您也可以：<br>' +
-          '1. 從 <a href="https://www.aviationweather.gov/metar/data?ids=' + icao + '" target="_blank">Aviation Weather</a> 複製 METAR<br>' +
+          '1. 從 <a href="https://aviationweather.gov/data/metar/?id=' + icao + '" target="_blank">Aviation Weather Data</a> 查看 METAR<br>' +
           '2. 或使用以下輸入框手動貼上 METAR：<br>' +
           '<textarea id="manualMetar" rows="3" cols="60" placeholder="貼上 METAR 資料..."></textarea>' +
           '<button onclick="parseManualMETAR()">解析</button>';
