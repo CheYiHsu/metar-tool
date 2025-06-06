@@ -43,6 +43,13 @@
       left: 145px;
       transform-origin: center;
     }
+    #approachPlane {
+      position: absolute;
+      font-size: 24px;
+      transform-origin: center;
+      transition: all 0.5s ease;
+      filter: drop-shadow(1px 1px 2px rgba(0,0,0,0.5));
+    }
     .angle-label {
       position: absolute;
       font-size: 14px;
@@ -150,6 +157,7 @@
 
   <div id="canvas">
     <div id="runway"></div>
+    <div id="approachPlane">✈️</div>
     <div id="windArrow">↓</div>
     <div id="windSpeed"></div>
   </div>
@@ -449,7 +457,7 @@
         windArrow.style.display = 'none'; // 無風時隱藏箭頭
       }
       
-      // 更新跑道方向
+      // 更新跑道方向和飛機位置
       const rwy = runwayMap[icao] || [50, 230];
       const rwy1 = rwy[0];
       const rwy2 = rwy[1];
@@ -464,8 +472,21 @@
       const diff1 = angleDiff(dir, rwy1);
       const diff2 = angleDiff(dir, rwy2);
       const bestRwy = diff1 < diff2 ? String(Math.round(rwy1 / 10)).padStart(2, '0') : String(Math.round(rwy2 / 10)).padStart(2, '0');
+      const bestRwyHeading = diff1 < diff2 ? rwy1 : rwy2;
       const angleToRwy = Math.min(diff1, diff2);
       const windType = angleToRwy <= 30 ? "順風" : angleToRwy >= 60 ? "側風" : "部分順風";
+      
+      // 更新飛機位置（在最佳跑道的進場端）
+      const approachPlane = document.getElementById("approachPlane");
+      const planeDistance = 100; // 距離中心的距離
+      const approachAngle = (bestRwyHeading + 180) % 360; // 進場方向（跑道相反方向）
+      const planeRad = (approachAngle - 90) * Math.PI / 180;
+      const planeX = 150 + planeDistance * Math.cos(planeRad);
+      const planeY = 150 + planeDistance * Math.sin(planeRad);
+      
+      approachPlane.style.left = planeX + "px";
+      approachPlane.style.top = planeY + "px";
+      approachPlane.style.transform = `translate(-50%, -50%) rotate(${bestRwyHeading}deg)`;
       
       // 更新顯示資訊
       document.getElementById("weatherInfo").innerHTML = `
