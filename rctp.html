@@ -485,8 +485,8 @@
       
       approachPlane.style.left = planeX + "px";
       approachPlane.style.top = planeY + "px";
-      // 飛機朝向跑道方向（預設飛機圖示是朝右的，所以要減90度）
-      approachPlane.style.transform = `translate(-50%, -50%) rotate(${bestRwyHeading - 90}deg)`;
+      // 飛機朝向跑道方向，再加45度調整
+      approachPlane.style.transform = `translate(-50%, -50%) rotate(${bestRwyHeading - 45}deg)`;
       
       // 更新顯示資訊
       document.getElementById("weatherInfo").innerHTML = `
