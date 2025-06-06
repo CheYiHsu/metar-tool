@@ -1,12 +1,24 @@
 <!DOCTYPE html>
-<html>
+<html lang="zh-Hant">
 <head>
-    <meta charset="UTF-8">
-    <title>METAR Tool</title>
-    <meta http-equiv="refresh" content="0; url=./rctp">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>機場天氣</title>
+  <style>
+    body {
+      font-family: sans-serif;
+      text-align: center;
+      padding: 40px;
+    }
+  </style>
 </head>
 <body>
-    <p>正在重導向到 METAR Tool...</p>
-    <p>如果沒有自動跳轉，請點擊 <a href="./rctp">這裡</a></p>
+  <h1>機場天氣</h1>
+  <label for="airportSelect">選擇機場：</label>
+  <select id="airportSelect" onchange="location.href=this.value">
+    <option value="">-- 請選擇 --</option>
+    <option value="rctp.html">RCTP</option>
+    <option value="rcss.html">RCSS</option>
+  </select>
 </body>
 </html>
