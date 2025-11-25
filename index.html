@@ -1,24 +1,358 @@
 <!DOCTYPE html>
 <html lang="zh-Hant">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>機場天氣</title>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>機場氣象 METAR 視覺化工具</title>
   <style>
-    body {
-      font-family: sans-serif;
-      text-align: center;
-      padding: 40px;
-    }
+    /* CSS 樣式整合與優化 */
+    :root { --primary: #007bff; --bg: #f8f9fa; --panel: #fff; }
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; text-align: center; padding: 20px; background-color: var(--bg); color: #333; }
+    
+    /* 儀表板區域 */
+    .dashboard { display: flex; flex-wrap: wrap; justify-content: center; gap: 30px; max-width: 1000px; margin: 0 auto; }
+    
+    /* 羅盤樣式 */
+    #canvas { width: 300px; height: 300px; margin: 0 auto; border: 5px solid #e9ecef; border-radius: 50%; position: relative; background: var(--panel); box-shadow: 0 4px 15px rgba(0,0,0,0.1); }
+    #windArrow { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); font-size: 80px; color: #dc3545; filter: drop-shadow(2px 2px 4px rgba(0,0,0,0.2)); transition: transform 0.8s cubic-bezier(0.4, 0, 0.2, 1); line-height: 1; z-index: 10; }
+    #windSpeed { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); font-size: 16px; font-weight: 800; color: #333; background: rgba(255,255,255,0.95); padding: 4px 8px; border-radius: 4px; pointer-events: none; z-index: 20; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+    
+    /* 跑道與飛機 */
+    #runway { position: absolute; width: 14px; height: 180px; background: #343a40; top: 60px; left: 143px; transform-origin: center; border-radius: 2px; transition: transform 0.5s ease; }
+    #runway::after { content: ''; display: block; width: 2px; height: 100%; border-left: 2px dashed #fff; margin: 0 auto; opacity: 0.5; }
+    #approachPlane { position: absolute; font-size: 28px; transform-origin: center; transition: all 0.8s cubic-bezier(0.34, 1.56, 0.64, 1); filter: drop-shadow(1px 1px 2px rgba(0,0,0,0.3)); z-index: 15; }
+    
+    /* 標籤 */
+    .angle-label { position: absolute; font-size: 12px; color: #adb5bd; transform: translate(-50%, -50%); }
+    .compass-label { position: absolute; font-size: 14px; font-weight: bold; color: #495057; transform: translate(-50%, -50%); }
+    
+    /* 資訊面板 */
+    .info-panel { background: var(--panel); padding: 20px; border-radius: 12px; box-shadow: 0 2px 10px rgba(0,0,0,0.05); text-align: left; min-width: 280px; }
+    .info-item { margin-bottom: 8px; padding-bottom: 8px; border-bottom: 1px solid #f1f3f5; display: flex; justify-content: space-between; }
+    .info-item:last-child { border-bottom: none; }
+    .red { color: #e03131; font-weight: bold; }
+    
+    /* 控制區 */
+    .controls { background: var(--panel); padding: 15px; border-radius: 12px; margin-bottom: 20px; display: inline-flex; align-items: center; gap: 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); }
+    select, button { font-size: 16px; padding: 8px 12px; border: 1px solid #dee2e6; border-radius: 6px; outline: none; }
+    button { background-color: var(--primary); color: white; border: none; cursor: pointer; transition: background 0.2s; }
+    button:hover { background-color: #0056b3; }
+    button:disabled { background-color: #a0c4ff; cursor: wait; }
+    
+    .loading-spinner { display: inline-block; width: 12px; height: 12px; border: 2px solid #fff; border-top-color: transparent; border-radius: 50%; animation: spin 1s linear infinite; margin-left: 5px; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    
+    .update-info { font-size: 12px; color: #868e96; margin-top: 5px; }
+    .error { color: #e03131; margin: 10px 0; font-weight: bold; }
+    .raw-metar { background: #343a40; color: #20c997; padding: 15px; border-radius: 8px; font-family: 'Courier New', monospace; font-size: 13px; margin: 20px auto; max-width: 800px; text-align: left; display: none; }
+    
+    .explanation { margin-top: 40px; text-align: left; max-width: 800px; margin-left: auto; margin-right: auto; font-size: 14px; color: #555; background: #fff; padding: 20px; border-radius: 8px; }
   </style>
 </head>
 <body>
-  <h1>機場天氣</h1>
-  <label for="airportSelect">選擇機場：</label>
-  <select id="airportSelect" onchange="location.href=this.value">
-    <option value="">-- 請選擇 --</option>
-    <option value="rctp.html">RCTP</option>
-    <option value="rcss.html">RCSS</option>
-  </select>
+
+  <h2>✈️ 機場 METAR 氣象觀測</h2>
+  
+  <div class="controls">
+    <select id="airportSelect">
+      <option value="RCTP">RCTP - 桃園國際機場</option>
+      <option value="RCSS">RCSS - 台北松山機場</option>
+      <option value="RCKH">RCKH - 高雄國際機場</option>
+      <option value="RCFN">RCFN - 台南機場</option>
+      <option value="RCMQ">RCMQ - 台中清泉崗機場</option>
+    </select>
+    <button id="refreshBtn" onclick="app.loadData(true)">
+      更新 <span id="spinner" style="display:none" class="loading-spinner"></span>
+    </button>
+  </div>
+  <div class="update-info" id="updateInfo">等待更新...</div>
+  <div class="error" id="errorMessage"></div>
+
+  <div class="dashboard">
+    <div id="canvas">
+      <div id="runway"></div>
+      <div id="approachPlane">✈️</div>
+      <div id="windArrow">↓</div>
+      <div id="windSpeed">Calm</div>
+    </div>
+
+    <div class="info-panel" id="weatherInfo">
+      <p style="color:#aaa; text-align:center;">請點擊更新取得資料</p>
+    </div>
+  </div>
+
+  <div class="raw-metar" id="rawMetar"></div>
+
+  <div class="explanation">
+    <h3>📖 資訊說明</h3>
+    <ul style="padding-left: 20px;">
+      <li><strong>METAR</strong>：航空例行天氣報告，通常每小時更新。</li>
+      <li><strong>建議跑道</strong>：根據當前風向計算之最佳起降跑道。</li>
+      <li><strong>飛行類別</strong>：<span style="color:green">VFR</span> (目視), <span style="color:blue">MVFR</span> (邊緣), <span style="color:red">IFR/LIFR</span> (儀器/低儀器)。</li>
+    </ul>
+  </div>
+
+  <script>
+    /**
+     * 機場應用程式主邏輯
+     * 封裝在 app 物件中以避免全域變數污染
+     */
+    const app = {
+      // 設定
+      config: {
+        cacheDuration: 10 * 60 * 1000, // 快取 10 分鐘 (毫秒)
+        proxyUrls: [
+          'https://api.allorigins.win/raw?url=',
+          'https://corsproxy.io/?'
+        ],
+        runwayMap: {
+          RCTP: [50, 230], RCSS: [100, 280], RCKH: [90, 270], 
+          RCFN: [90, 270], RCMQ: [40, 220]
+        }
+      },
+
+      // 初始化
+      init() {
+        this.initCompass();
+        
+        // 1. 檢查 URL 是否有指定機場 (?airport=RCKH)
+        const params = new URLSearchParams(window.location.search);
+        const airportParam = params.get('airport');
+        if (airportParam) {
+          const select = document.getElementById('airportSelect');
+          // 檢查該機場是否在選單內
+          if ([...select.options].some(o => o.value === airportParam)) {
+            select.value = airportParam;
+          }
+        }
+
+        // 2. 綁定事件
+        document.getElementById('airportSelect').addEventListener('change', (e) => {
+          // 更新 URL 但不重新整理頁面 (SPA 體驗)
+          const newUrl = new URL(window.location);
+          newUrl.searchParams.set('airport', e.target.value);
+          window.history.pushState({}, '', newUrl);
+          this.loadData();
+        });
+
+        // 3. 初始載入
+        this.loadData();
+      },
+
+      // 繪製羅盤背景 (只執行一次)
+      initCompass() {
+        const canvas = document.getElementById("canvas");
+        // 畫角度數字
+        for (let i = 30; i <= 360; i += 30) {
+          const label = document.createElement("div");
+          label.className = "angle-label";
+          const rad = (i - 90) * Math.PI / 180;
+          label.style.left = 150 + 135 * Math.cos(rad) + "px";
+          label.style.top = 150 + 135 * Math.sin(rad) + "px";
+          label.innerText = i === 360 ? 36 : i / 10;
+          canvas.appendChild(label);
+        }
+        // 畫方位 (N, E, S, W)
+        const dirs = [{t:'N',d:0}, {t:'E',d:90}, {t:'S',d:180}, {t:'W',d:270}];
+        dirs.forEach(d => {
+          const l = document.createElement("div");
+          l.className = "compass-label";
+          const rad = (d.d - 90) * Math.PI / 180;
+          l.style.left = 150 + 115 * Math.cos(rad) + "px";
+          l.style.top = 150 + 115 * Math.sin(rad) + "px";
+          l.innerText = d.t;
+          canvas.appendChild(l);
+        });
+      },
+
+      // 核心功能：載入資料 (包含快取邏輯)
+      async loadData(forceRefresh = false) {
+        const icao = document.getElementById('airportSelect').value;
+        const ui = {
+          btn: document.getElementById('refreshBtn'),
+          spinner: document.getElementById('spinner'),
+          error: document.getElementById('errorMessage'),
+          info: document.getElementById('updateInfo')
+        };
+
+        ui.btn.disabled = true;
+        ui.spinner.style.display = 'inline-block';
+        ui.error.textContent = '';
+        ui.info.textContent = '讀取中...';
+
+        try {
+          // 步驟 A: 檢查快取
+          const cacheKey = `metar_${icao}`;
+          const cached = localStorage.getItem(cacheKey);
+          
+          if (!forceRefresh && cached) {
+            const data = JSON.parse(cached);
+            const age = Date.now() - data.timestamp;
+            // 如果資料小於設定的快取時間，直接使用
+            if (age < this.config.cacheDuration) {
+              console.log('Using cached data');
+              this.render(icao, data.metar);
+              ui.info.textContent = `更新於: ${new Date(data.timestamp).toLocaleTimeString()} (快取)`;
+              return; 
+            }
+          }
+
+          // 步驟 B: 網路請求 (依序嘗試多個來源)
+          const metarText = await this.fetchMetarFromNetwork(icao);
+          
+          // 儲存快取
+          localStorage.setItem(cacheKey, JSON.stringify({
+            timestamp: Date.now(),
+            metar: metarText
+          }));
+
+          this.render(icao, metarText);
+          ui.info.textContent = `更新於: ${new Date().toLocaleTimeString()} (最新)`;
+
+        } catch (err) {
+          console.error(err);
+          ui.error.innerHTML = `無法取得資料: ${err.message}<br><a href="https://aviationweather.gov/data/metar/?id=${icao}" target="_blank">點此查看官方資料</a>`;
+        } finally {
+          ui.btn.disabled = false;
+          ui.spinner.style.display = 'none';
+        }
+      },
+
+      // 網路請求邏輯 (分離出來)
+      async fetchMetarFromNetwork(icao) {
+        const sources = [
+          `https://aviationweather.gov/api/data/metar?ids=${icao}&format=raw&taf=false`, // 官方
+          `https://metar.vatsim.net/metar.php?id=${icao}` // VATSIM
+        ];
+
+        // 嘗試官方與備用來源
+        for (let src of sources) {
+          try {
+            // 嘗試直連
+            let response = await fetch(src);
+            if(response.ok) return this.validateResponse(await response.text());
+          } catch(e) { /* Ignore direct fail */ }
+          
+          // 嘗試 Proxy
+          for (let proxy of this.config.proxyUrls) {
+            try {
+              let response = await fetch(proxy + encodeURIComponent(src));
+              if(response.ok) return this.validateResponse(await response.text());
+            } catch(e) { /* Ignore proxy fail */ }
+          }
+        }
+        throw new Error("所有來源皆無回應");
+      },
+
+      validateResponse(text) {
+        if (!text || text.includes('No METAR') || text.trim().length < 10) throw new Error("無效資料");
+        return text.trim();
+      },
+
+      // 渲染畫面
+      render(icao, metarText) {
+        document.getElementById('rawMetar').textContent = metarText;
+        document.getElementById('rawMetar').style.display = 'block';
+        
+        // 解析資料
+        const data = this.parseMetar(metarText);
+        
+        // 1. 繪製風向與跑道
+        const windDir = data.wind.dir === 'VRB' ? 0 : data.wind.dir;
+        const rwy = this.config.runwayMap[icao] || [0, 180];
+        
+        // 更新風箭頭
+        const arrow = document.getElementById('windArrow');
+        const speedTag = document.getElementById('windSpeed');
+        
+        if(data.wind.speed === 0) {
+            arrow.style.display = 'none';
+            speedTag.innerText = 'Calm';
+        } else {
+            arrow.style.display = 'block';
+            arrow.style.transform = `translate(-50%, -50%) rotate(${windDir}deg)`;
+            speedTag.innerText = (data.wind.dir === 'VRB' ? 'VRB' : '') + data.wind.speed + ' kt';
+        }
+
+        // 計算最佳跑道
+        const rwyHeading = rwy[0];
+        document.getElementById("runway").style.transform = `rotate(${rwyHeading}deg)`;
+        
+        const diff1 = Math.abs(windDir - rwy[0]) % 360;
+        const diff2 = Math.abs(windDir - rwy[1]) % 360;
+        const d1 = diff1 > 180 ? 360 - diff1 : diff1;
+        const d2 = diff2 > 180 ? 360 - diff2 : diff2;
+        
+        const bestRwyVal = d1 <= d2 ? rwy[0] : rwy[1];
+        const bestRwyNum = String(Math.round(bestRwyVal / 10)).padStart(2, '0');
+        
+        // 更新飛機
+        const plane = document.getElementById("approachPlane");
+        const approachAngle = (bestRwyVal + 180) % 360; // 進場方向是跑道反向
+        const rad = (approachAngle - 90) * Math.PI / 180;
+        plane.style.left = 150 + 100 * Math.cos(rad) + "px";
+        plane.style.top = 150 + 100 * Math.sin(rad) + "px";
+        plane.style.transform = `translate(-50%, -50%) rotate(${bestRwyVal - 45}deg)`; // -45 是因為飛機 icon 本身是斜的
+
+        // 2. 填寫文字資訊
+        const infoHtml = `
+          <div class="info-item"><span>天氣現象</span> <span>${data.icon}</span></div>
+          <div class="info-item"><span>飛行類別</span> <span class="${['IFR','LIFR'].includes(data.category)?'red':''}">${data.category}</span></div>
+          <div class="info-item"><span>溫度 / 露點</span> <span>${data.temp} / ${data.dew}</span></div>
+          <div class="info-item"><span>風向風速</span> <span>${data.wind.raw}</span></div>
+          <div class="info-item"><span>能見度</span> <span>${data.vis}</span></div>
+          <div class="info-item"><span>雲底高</span> <span class="${data.ceilVal < 2000 ? 'red':''}">${data.ceil}</span></div>
+          <div class="info-item"><span>氣壓 (QNH)</span> <span>${data.qnh}</span></div>
+          <div class="info-item" style="background:#e7f5ff; padding:5px;"><span>✨ 建議跑道</span> <strong>RWY ${bestRwyNum}</strong></div>
+        `;
+        document.getElementById('weatherInfo').innerHTML = infoHtml;
+      },
+
+      // 解析邏輯 (Regex)
+      parseMetar(txt) {
+        const wind = txt.match(/(\d{3}|VRB)(\d{2,3})(?:G\d{2,3})?KT/);
+        const temp = txt.match(/(M?\d{2})\/(M?\d{2})/);
+        const vis = txt.match(/\s(\d{4})\s/);
+        const ceil = txt.match(/(?:BKN|OVC)(\d{3})/);
+        const qnh = txt.match(/Q(\d{4})/);
+
+        // 基本數值處理
+        const wDir = (wind && wind[1] !== 'VRB') ? parseInt(wind[1]) : 0;
+        const wSpd = wind ? parseInt(wind[2]) : 0;
+        const tVal = temp ? parseInt(temp[1].replace('M','-')) : 0;
+        const dVal = temp ? parseInt(temp[2].replace('M','-')) : 0;
+        const visVal = vis ? parseInt(vis[1]) : (txt.includes('9999')?9999:5000);
+        const ceilVal = ceil ? parseInt(ceil[1])*100 : 10000;
+
+        // 計算飛行類別
+        let cat = 'VFR';
+        if(visVal<1600 || ceilVal<500) cat='LIFR';
+        else if(visVal<5000 || ceilVal<1000) cat='IFR';
+        else if(visVal<8000 || ceilVal<3000) cat='MVFR';
+
+        // 簡單天氣圖示
+        let icon = "☀️";
+        if(txt.includes('TS')) icon="⛈️";
+        else if(txt.includes('RA')||txt.includes('DZ')) icon="🌧️";
+        else if(txt.includes('FG')||txt.includes('HZ')) icon="🌫️";
+        else if(txt.includes('BKN')||txt.includes('OVC')) icon="☁️";
+
+        return {
+            wind: { dir: wind && wind[1]==='VRB'?'VRB':wDir, speed: wSpd, raw: wind?wind[0]:'N/A' },
+            temp: tVal + "°C",
+            dew: dVal + "°C",
+            vis: visVal===9999 ? "10km+" : visVal+"m",
+            ceil: ceilVal===10000 ? "無顯著雲層" : ceilVal+"ft",
+            ceilVal: ceilVal,
+            qnh: qnh ? qnh[1]+" hPa" : "N/A",
+            category: cat,
+            icon: icon
+        };
+      }
+    };
+
+    // 啟動 App
+    window.onload = () => app.init();
+  </script>
 </body>
 </html>
